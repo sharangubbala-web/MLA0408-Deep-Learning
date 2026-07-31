@@ -1,0 +1,50 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+X = np.array([1, 2, 3, 4, 5], dtype=float)
+Y = np.array([2, 4, 6, 8, 10], dtype=float)
+
+w = 0.0
+b = 0.0
+learning_rate = 0.01
+iterations = 100
+n = len(X)
+
+loss_history = []
+
+for i in range(iterations):
+    Y_pred = w * X + b
+    loss = np.mean((Y - Y_pred) ** 2)
+    loss_history.append(loss)
+
+    dw = (-2 / n) * np.sum(X * (Y - Y_pred))
+    db = (-2 / n) * np.sum(Y - Y_pred)
+
+    w = w - learning_rate * dw
+    b = b - learning_rate * db
+
+print("Final Weight:", round(w, 4))
+print("Final Bias:", round(b, 4))
+print("Final Loss:", round(loss_history[-1], 4))
+
+print("\nPredicted Values:")
+for i in range(n):
+    print(f"Input = {X[i]}, Predicted = {round(w * X[i] + b, 2)}")
+
+plt.figure(figsize=(6, 4))
+plt.plot(loss_history, color="blue")
+plt.title("Learning Curve")
+plt.xlabel("Iterations")
+plt.ylabel("Loss (MSE)")
+plt.grid(True)
+plt.show()
+
+plt.figure(figsize=(6, 4))
+plt.scatter(X, Y, color="red", label="Actual Data")
+plt.plot(X, w * X + b, color="green", label="Regression Line")
+plt.title("Linear Regression using Gradient Descent")
+plt.xlabel("X")
+plt.ylabel("Y")
+plt.legend()
+plt.grid(True)
+plt.show()

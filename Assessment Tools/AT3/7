@@ -1,0 +1,35 @@
+import numpy as np
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+print("Q7(a) - Manual Forward Propagation and Verification Using Python")
+
+x1 = 1
+x2 = 2
+w1 = 0.5
+w2 = 0.4
+b = 0.1
+
+z = x1 * w1 + x2 * w2 + b
+output = sigmoid(z)
+
+print("Weighted Sum =", round(z, 4))
+print("Network Output =", round(output, 4))
+
+print("\nQ7(b) - Weight Update using Backpropagation")
+
+x = 4
+w = 2
+target = 10
+learning_rate = 0.01
+
+prediction = w * x
+error = target - prediction
+gradient = -2 * x * error
+new_weight = w - learning_rate * gradient
+
+print("Prediction =", prediction)
+print("Error =", error)
+print("Gradient =", gradient)
+print("Updated Weight =", new_weight)

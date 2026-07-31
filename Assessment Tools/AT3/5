@@ -1,0 +1,31 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+def relu(x):
+    return np.maximum(0, x)
+
+inputs = np.array([-5, -3, -1, 0, 1, 3, 5])
+
+sigmoid_output = sigmoid(inputs)
+relu_output = relu(inputs)
+
+print("Input Values")
+print(inputs)
+
+print("\nSigmoid Output")
+print(sigmoid_output)
+
+print("\nReLU Output")
+print(relu_output)
+
+plt.plot(inputs, sigmoid_output, marker='o', label='Sigmoid')
+plt.plot(inputs, relu_output, marker='s', label='ReLU')
+plt.title("Sigmoid vs ReLU Activation Functions")
+plt.xlabel("Input")
+plt.ylabel("Output")
+plt.legend()
+plt.grid(True)
+plt.show()
