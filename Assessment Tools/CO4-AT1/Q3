@@ -1,0 +1,67 @@
+import tensorflow as tf
+from tensorflow.keras import layers, Model
+
+SRC_VOCAB = 10000
+TGT_VOCAB = 12000
+EMBED_DIM = 256
+UNITS = 256
+
+encoder_inputs = layers.Input(
+    shape=(None,),
+    name="encoder_input"
+)
+
+encoder_embedding = layers.Embedding(
+    SRC_VOCAB, EMBED_DIM
+)(encoder_inputs)
+
+encoder = layers.Bidirectional(
+    layers.LSTM(
+        UNITS,
+        return_sequences=True,
+        return_state=True
+    )
+)
+
+encoder_outputs, forward_h, forward_c, backward_h, backward_c = \
+    encoder(encoder_embedding)
+
+state_h = layers.Concatenate()([forward_h, backward_h])
+state_c = layers.Concatenate()([forward_c, backward_c])
+
+decoder_inputs = layers.Input(
+    shape=(None,),
+    name="decoder_input"
+)
+
+decoder_embedding = layers.Embedding(
+    TGT_VOCAB, EMBED_DIM
+)(decoder_inputs)
+
+decoder = layers.LSTM(
+    UNITS * 2,
+    return_sequences=True
+)
+
+decoder_outputs = decoder(
+    decoder_embedding,
+    initial_state=[state_h, state_c]
+)
+
+outputs = layers.Dense(
+    TGT_VOCAB,
+    activation="softmax"
+)(decoder_outputs)
+
+model = Model(
+    [encoder_inputs, decoder_inputs],
+    outputs
+)
+
+model.compile(
+    optimizer="adam",
+    loss="sparse_categorical_crossentropy",
+    metrics=["accuracy"]
+)
+
+model.summary()

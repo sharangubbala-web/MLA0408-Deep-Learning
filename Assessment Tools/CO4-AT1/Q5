@@ -1,0 +1,57 @@
+import tensorflow as tf
+from tensorflow.keras import layers, Model
+
+FEATURE_DIM = 2048
+LSTM_UNITS = 256
+VOCAB_SIZE = 10000
+MAX_LENGTH = 20
+
+video_input = layers.Input(
+    shape=(None, FEATURE_DIM),
+    name="video_features"
+)
+
+encoder = layers.LSTM(
+    LSTM_UNITS,
+    return_state=True
+)
+
+_, hidden_state, cell_state = encoder(video_input)
+
+caption_input = layers.Input(
+    shape=(MAX_LENGTH,),
+    name="caption_input"
+)
+
+embedding = layers.Embedding(
+    VOCAB_SIZE,
+    256
+)(caption_input)
+
+decoder = layers.LSTM(
+    LSTM_UNITS,
+    return_sequences=True
+)
+
+decoder_output = decoder(
+    embedding,
+    initial_state=[hidden_state, cell_state]
+)
+
+output = layers.Dense(
+    VOCAB_SIZE,
+    activation="softmax"
+)(decoder_output)
+
+model = Model(
+    [video_input, caption_input],
+    output
+)
+
+model.compile(
+    optimizer="adam",
+    loss="sparse_categorical_crossentropy",
+    metrics=["accuracy"]
+)
+
+model.summary()
