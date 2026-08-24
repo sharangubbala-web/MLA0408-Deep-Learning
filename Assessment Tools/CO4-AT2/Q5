@@ -1,0 +1,385 @@
+# Install required libraries
+!pip install -q tensorflow opencv-python
+
+import cv2
+import numpy as np
+import tensorflow as tf
+import matplotlib.pyplot as plt
+
+from tensorflow.keras.applications import InceptionV3
+from tensorflow.keras.applications.inception_v3 import preprocess_input
+from tensorflow.keras.preprocessing.image import img_to_array
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.layers import Input, Dense, LSTM, Embedding
+from tensorflow.keras.models import Model
+
+
+cnn = InceptionV3(
+    weights="imagenet",
+    include_top=False,
+    pooling="avg"
+)
+
+# Freeze CNN layers because we are using Transfer Learning
+cnn.trainable = False
+
+print("Pretrained InceptionV3 loaded successfully.")
+
+
+def extract_video_features(video_path):
+
+    cap = cv2.VideoCapture(video_path)
+
+    frames = []
+
+    while True:
+
+        ret, frame = cap.read()
+
+        if not ret:
+            break
+
+        # Select one frame from every 30 frames
+        if len(frames) == 0 or len(frames) % 30 == 0:
+
+            frame = cv2.cvtColor(
+                frame,
+                cv2.COLOR_BGR2RGB
+            )
+
+            frame = cv2.resize(
+                frame,
+                (299, 299)
+            )
+
+            frame = img_to_array(frame)
+
+            frame = preprocess_input(frame)
+
+            frames.append(frame)
+
+    cap.release()
+
+    # If no frames are found
+    if len(frames) == 0:
+        raise ValueError("Video could not be read.")
+
+    frames = np.array(frames)
+
+    # Extract CNN features
+    features = cnn.predict(
+        frames,
+        verbose=0
+    )
+
+    # Average all frame features
+    video_feature = np.mean(
+        features,
+        axis=0
+    )
+
+    return video_feature
+
+
+captions = [
+    "<start> a man is playing football <end>",
+    "<start> a person is walking on the road <end>",
+    "<start> a woman is talking to a child <end>",
+    "<start> a car is moving on the road <end>",
+    "<start> a dog is running in the park <end>"
+]
+
+# Create vocabulary
+words = set()
+
+for caption in captions:
+
+    for word in caption.split():
+
+        words.add(word)
+
+word_to_index = {
+    word: index + 1
+    for index, word in enumerate(sorted(words))
+}
+
+index_to_word = {
+    index: word
+    for word, index in word_to_index.items()
+}
+
+vocab_size = len(word_to_index) + 1
+
+print("Vocabulary Size:", vocab_size)
+
+
+sequences = []
+
+for caption in captions:
+
+    sequence = [
+        word_to_index[word]
+        for word in caption.split()
+    ]
+
+    sequences.append(sequence)
+
+max_length = max(
+    len(sequence)
+    for sequence in sequences
+)
+
+print("Maximum Caption Length:", max_length)
+
+
+X_caption = []
+Y_caption = []
+
+for sequence in sequences:
+
+    for i in range(1, len(sequence)):
+
+        input_sequence = sequence[:i]
+
+        output_word = sequence[i]
+
+        input_sequence = pad_sequences(
+            [input_sequence],
+            maxlen=max_length,
+            padding="pre"
+        )[0]
+
+        X_caption.append(input_sequence)
+
+        Y_caption.append(output_word)
+
+X_caption = np.array(X_caption)
+
+Y_caption = np.array(Y_caption)
+
+print("Caption Input Shape:", X_caption.shape)
+print("Caption Output Shape:", Y_caption.shape)
+
+
+feature_size = 2048
+
+video_features = np.random.random(
+    (len(X_caption), feature_size)
+)
+
+video_input = Input(
+    shape=(feature_size,),
+    name="video_features"
+)
+
+# Caption input
+caption_input = Input(
+    shape=(max_length,),
+    name="caption_input"
+)
+
+initial_h = Dense(
+    512,
+    activation="tanh"
+)(video_input)
+
+initial_c = Dense(
+    512,
+    activation="tanh"
+)(video_input)
+
+# Word embedding
+embedding = Embedding(
+    input_dim=vocab_size,
+    output_dim=256,
+    mask_zero=True
+)(caption_input)
+
+# LSTM Decoder
+lstm_output = LSTM(
+    512,
+    return_sequences=True
+)(
+    embedding,
+    initial_state=[
+        initial_h,
+        initial_c
+    ]
+)
+
+# Predict next word
+output = Dense(
+    vocab_size,
+    activation="softmax"
+)(lstm_output)
+
+# Create model
+model = Model(
+    inputs=[
+        video_input,
+        caption_input
+    ],
+    outputs=output
+)
+
+model.compile(
+    optimizer="adam",
+    loss="sparse_categorical_crossentropy",
+    metrics=["accuracy"]
+)
+
+print("\nLSTM Encoder-Decoder Model:")
+model.summary()
+
+# Convert target words into sequence format
+Y_train = Y_caption.reshape(
+    (-1, 1)
+)
+
+# Repeat target so it matches decoder sequence length
+Y_train = np.repeat(
+    Y_train,
+    max_length,
+    axis=1
+)
+
+Y_train = Y_train.reshape(
+    (-1, max_length, 1)
+)
+
+
+
+print("\nTraining the video captioning model...")
+
+history = model.fit(
+    [video_features, X_caption],
+    Y_train,
+    epochs=5,
+    batch_size=8,
+    verbose=1
+)
+
+
+def generate_caption(
+    video_feature,
+    max_length
+):
+
+    caption = [
+        word_to_index["<start>"]
+    ]
+
+    for _ in range(max_length):
+
+        sequence = pad_sequences(
+            [caption],
+            maxlen=max_length,
+            padding="pre"
+        )
+
+        # Predict next word
+        prediction = model.predict(
+            [
+                video_feature.reshape(1, -1),
+                sequence
+            ],
+            verbose=0
+        )
+
+        # Select most probable word
+        next_word_id = np.argmax(
+            prediction[0, -1, :]
+        )
+
+        if next_word_id == 0:
+            break
+
+        next_word = index_to_word.get(
+            next_word_id,
+            ""
+        )
+
+        if next_word == "<end>":
+            break
+
+        caption.append(next_word_id)
+
+    # Convert IDs back to words
+    result = []
+
+    for word_id in caption:
+
+        word = index_to_word.get(
+            word_id,
+            ""
+        )
+
+        if word not in ["<start>", "<end>", ""]:
+            result.append(word)
+
+    return " ".join(result)
+
+
+# Use one sample visual feature
+sample_feature = video_features[0]
+
+generated_caption = generate_caption(
+    sample_feature,
+    max_length
+)
+
+print("\nGenerated Caption:")
+print(generated_caption)
+
+
+plt.figure(figsize=(8, 5))
+
+plt.plot(
+    history.history["accuracy"]
+)
+
+plt.title(
+    "Video Captioning Model Training Accuracy"
+)
+
+plt.xlabel("Epoch")
+plt.ylabel("Accuracy")
+
+plt.show()
+
+print("""
+============================================================
+VIDEO CAPTIONING ARCHITECTURE
+============================================================
+
+Video
+  |
+  v
+Frame Extraction
+  |
+  v
+Pretrained InceptionV3
+  |
+  v
+Visual Feature Extraction
+  |
+  v
+LSTM Encoder-Decoder
+  |
+  v
+Word Embedding
+  |
+  v
+LSTM
+  |
+  v
+Dense + Softmax
+  |
+  v
+Generated Caption
+
+Transfer Learning -> Visual Features
+LSTM               -> Sequential Language Generation
+Encoder-Decoder    -> Converts Visual Information to Caption
+============================================================
+""")

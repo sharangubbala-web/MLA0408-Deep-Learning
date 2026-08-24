@@ -1,0 +1,85 @@
+# Q3: Bidirectional RNN Encoder-Decoder
+
+import tensorflow as tf
+from tensorflow.keras import layers, Model
+
+# Example vocabulary
+input_vocab_size = 10000
+target_vocab_size = 10000
+
+embedding_dim = 128
+hidden_units = 256
+
+# Encoder input
+encoder_inputs = layers.Input(
+    shape=(None,),
+    name="encoder_input"
+)
+
+# Encoder embedding
+encoder_embedding = layers.Embedding(
+    input_vocab_size,
+    embedding_dim
+)(encoder_inputs)
+
+# Bidirectional RNN
+encoder_rnn = layers.Bidirectional(
+    layers.LSTM(
+        hidden_units,
+        return_sequences=True,
+        return_state=True
+    )
+)
+
+encoder_outputs, forward_h, forward_c, backward_h, backward_c = \
+    encoder_rnn(encoder_embedding)
+
+# Combine forward and backward states
+state_h = layers.Concatenate()(
+    [forward_h, backward_h]
+)
+
+state_c = layers.Concatenate()(
+    [forward_c, backward_c]
+)
+
+# Decoder input
+decoder_inputs = layers.Input(
+    shape=(None,),
+    name="decoder_input"
+)
+
+decoder_embedding = layers.Embedding(
+    target_vocab_size,
+    embedding_dim
+)(decoder_inputs)
+
+# Decoder
+decoder_lstm = layers.LSTM(
+    hidden_units * 2,
+    return_sequences=True
+)
+
+decoder_outputs = decoder_lstm(
+    decoder_embedding,
+    initial_state=[state_h, state_c]
+)
+
+# Output vocabulary
+decoder_outputs = layers.Dense(
+    target_vocab_size,
+    activation="softmax"
+)(decoder_outputs)
+
+model = Model(
+    [encoder_inputs, decoder_inputs],
+    decoder_outputs
+)
+
+model.compile(
+    optimizer="adam",
+    loss="sparse_categorical_crossentropy",
+    metrics=["accuracy"]
+)
+
+model.summary()
