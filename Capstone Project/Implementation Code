@@ -1,1 +1,470 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
 
+from modules.module1_data import (
+    load_transactions,
+    add_transaction,
+    calculate_financial_summary,
+    save_transactions
+)
+
+from modules.module2_analytics import (
+    classify_dataframe,
+    category_summary,
+    monthly_summary,
+    detect_basic_outliers
+)
+
+from modules.module3_prediction import (
+    train_lstm,
+    predict_next_month,
+    generate_budget_recommendation
+)
+
+from modules.module4_health import (
+    calculate_health_score,
+    health_status
+)
+
+
+st.set_page_config(
+    page_title="AI Personal Finance",
+    page_icon="💰",
+    layout="wide"
+)
+
+
+df = load_transactions()
+
+st.sidebar.title(
+    "💰 AI Finance System"
+)
+
+page = st.sidebar.radio(
+    "Navigation",
+    [
+        "Dashboard",
+        "Module 1 - Data Management",
+        "Module 2 - Expense Analytics",
+        "Module 3 - AI Budget Prediction",
+        "Module 4 - Financial Health"
+    ]
+)
+
+if page == "Dashboard":
+
+    st.title(
+        "🤖 AI-Powered Personal Finance Management"
+    )
+
+    st.caption(
+        "Deep Learning-Based Budget Prediction & Recommendation"
+    )
+
+    summary = calculate_financial_summary(df)
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric(
+        "Income",
+        f"₹{summary['income']:,.0f}"
+    )
+
+    col2.metric(
+        "Expenses",
+        f"₹{summary['expenses']:,.0f}"
+    )
+
+    col3.metric(
+        "Savings",
+        f"₹{summary['savings']:,.0f}"
+    )
+
+    col4.metric(
+        "Savings Rate",
+        f"{summary['savings_rate']:.1f}%"
+    )
+
+    st.divider()
+
+    monthly = monthly_summary(df)
+
+    if not monthly.empty:
+
+        fig = px.line(
+            monthly,
+            x="month",
+            y="amount",
+            markers=True,
+            title="Monthly Spending Trend"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+
+elif page == "Module 1 - Data Management":
+
+    st.title(
+        "Module 1 — User & Financial Data Management"
+    )
+
+    st.subheader(
+        "Add Transaction"
+    )
+
+    with st.form(
+        "transaction_form"
+    ):
+
+        date = st.date_input(
+            "Date"
+        )
+
+        description = st.text_input(
+            "Description"
+        )
+
+        amount = st.number_input(
+            "Amount",
+            min_value=0.0
+        )
+
+        transaction_type = st.selectbox(
+            "Type",
+            [
+                "Expense",
+                "Income"
+            ]
+        )
+
+        category = st.selectbox(
+            "Category",
+            [
+                "Food",
+                "Transport",
+                "Shopping",
+                "Bills",
+                "Entertainment",
+                "Salary",
+                "Other"
+            ]
+        )
+
+        payment = st.selectbox(
+            "Payment Method",
+            [
+                "UPI",
+                "Cash",
+                "Card",
+                "Bank"
+            ]
+        )
+
+        submit = st.form_submit_button(
+            "Add Transaction"
+        )
+
+        if submit:
+
+            df = add_transaction(
+                df,
+                date,
+                description,
+                amount,
+                transaction_type,
+                category,
+                payment
+            )
+
+            save_transactions(df)
+
+            st.success(
+                "Transaction added successfully!"
+            )
+
+    st.subheader(
+        "Transaction History"
+    )
+
+    st.dataframe(
+        df.sort_values(
+            "date",
+            ascending=False
+        ),
+        use_container_width=True
+    )
+
+
+elif page == "Module 2 - Expense Analytics":
+
+    st.title(
+        "Module 2 — Smart Expense Classification & Analytics"
+    )
+
+    classified = classify_dataframe(df)
+
+    st.subheader(
+        "AI Expense Classification"
+    )
+
+    st.dataframe(
+        classified[
+            [
+                "description",
+                "amount",
+                "category",
+                "predicted_category"
+            ]
+        ],
+        use_container_width=True
+    )
+
+    st.divider()
+
+    summary = category_summary(df)
+
+    if not summary.empty:
+
+        fig = px.pie(
+            values=summary.values,
+            names=summary.index,
+            title="Category-wise Spending"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+    st.subheader(
+        "Potential Spending Outliers"
+    )
+
+    anomalies = detect_basic_outliers(df)
+
+    st.dataframe(
+        anomalies,
+        use_container_width=True
+    )
+
+
+
+elif page == "Module 3 - AI Budget Prediction":
+
+    st.title(
+        "Module 3 — Deep Learning Budget Prediction & Recommendation"
+    )
+
+    summary = calculate_financial_summary(df)
+
+    st.subheader(
+        "LSTM Spending Forecast"
+    )
+
+    if st.button(
+        "Train Deep Learning Model"
+    ):
+
+        with st.spinner(
+            "Training LSTM..."
+        ):
+
+            model, scaler = train_lstm(
+                df
+            )
+
+        if model is None:
+
+            st.error(
+                "Not enough historical data. "
+                "Add at least 5–6 months of transactions."
+            )
+
+        else:
+
+            prediction = predict_next_month(
+                model,
+                scaler,
+                df
+            )
+
+            st.session_state[
+                "prediction"
+            ] = prediction
+
+            st.success(
+                "LSTM model trained successfully!"
+            )
+
+    if "prediction" in st.session_state:
+
+        prediction = st.session_state[
+            "prediction"
+        ]
+
+        st.metric(
+            "Predicted Next-Month Spending",
+            f"₹{prediction:,.0f}"
+        )
+
+        st.divider()
+
+        st.subheader(
+            "Personalized Budget Recommendation"
+        )
+
+        categories = category_summary(df)
+
+        category_dict = (
+            categories.to_dict()
+        )
+
+        recommendation = (
+            generate_budget_recommendation(
+                summary["income"],
+                prediction,
+                category_dict,
+                summary["income"] * 0.20
+            )
+        )
+
+        rec_df = pd.DataFrame(
+            {
+                "Category":
+                    list(recommendation.keys()),
+
+                "Recommended Budget":
+                    list(recommendation.values())
+            }
+        )
+
+        st.dataframe(
+            rec_df,
+            use_container_width=True
+        )
+
+        fig = px.bar(
+            rec_df,
+            x="Category",
+            y="Recommended Budget",
+            title="AI Recommended Budget"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+
+elif page == "Module 4 - Financial Health":
+
+    st.title(
+        "Module 4 — Financial Health Monitoring & Reporting"
+    )
+
+    summary = calculate_financial_summary(df)
+
+    budget = (
+        summary["income"] * 0.80
+    )
+
+    goal_progress = min(
+        summary["savings_rate"] * 3,
+        100
+    )
+
+    score = calculate_health_score(
+        summary["income"],
+        summary["expenses"],
+        summary["savings"],
+        budget,
+        goal_progress
+    )
+
+    status = health_status(
+        score
+    )
+
+    col1, col2 = st.columns(2)
+
+    col1.metric(
+        "Financial Health Score",
+        f"{score}/100"
+    )
+
+    col2.metric(
+        "Status",
+        status
+    )
+
+    st.progress(
+        score / 100
+    )
+
+    st.divider()
+
+    st.subheader(
+        "AI Financial Insights"
+    )
+
+    if summary["savings_rate"] >= 20:
+
+        st.success(
+            "Your savings rate is healthy."
+        )
+
+    else:
+
+        st.warning(
+            "Your savings rate is below the recommended target."
+        )
+
+    if summary["expenses"] > budget:
+
+        st.error(
+            "Your current expenses exceed the planned budget."
+        )
+
+    else:
+
+        st.success(
+            "Your expenses are currently within budget."
+        )
+
+    if summary["savings"] > 0:
+
+        st.info(
+            f"You currently save approximately "
+            f"₹{summary['savings']:,.0f}."
+        )
+
+    st.subheader(
+        "Financial Report"
+    )
+
+    report = pd.DataFrame({
+
+        "Metric": [
+            "Total Income",
+            "Total Expenses",
+            "Savings",
+            "Savings Rate",
+            "Financial Health Score",
+            "Financial Status"
+        ],
+
+        "Value": [
+            f"₹{summary['income']:,.2f}",
+            f"₹{summary['expenses']:,.2f}",
+            f"₹{summary['savings']:,.2f}",
+            f"{summary['savings_rate']:.2f}%",
+            score,
+            status
+        ]
+    })
+
+    st.table(report)
